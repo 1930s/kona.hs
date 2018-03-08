@@ -1,0 +1,57 @@
+name:                kona
+version:             0.1.0.0
+github:              "inflation/kona.hs"
+license:             GPL3
+author:              "Inflation"
+maintainer:          "hypernovagama@gmail.com"
+copyright:           "2018 Inflaiton"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on Github at <https://github.com/githubuser/kona.hs#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- aeson
+- req
+- data-default
+- containers
+- bytestring
+- text
+- filepath
+- split
+- directory
+
+library:
+  source-dirs: src
+
+executables:
+  kona:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - kona
+
+tests:
+  kona-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - kona
