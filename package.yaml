@@ -1,7 +1,7 @@
 name:                kona
 version:             0.1.0.0
 github:              "inflation/kona.hs"
-license:             GPL3
+license:             GPL-3
 author:              "Inflation"
 maintainer:          "hypernovagama@gmail.com"
 copyright:           "2018 Inflaiton"
@@ -30,6 +30,8 @@ dependencies:
 - filepath
 - split
 - directory
+- stm
+- stm-chans
 
 library:
   source-dirs: src
@@ -42,6 +44,7 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -eventlog
     dependencies:
     - kona
 
