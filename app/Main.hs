@@ -1,8 +1,9 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DataKinds #-}
 
 module Main where
 
 import Lib
+import Utils
 
 import Control.Monad.IO.Class
 import Data.Monoid
@@ -17,7 +18,7 @@ import Data.Default
 import Network.HTTP.Req
 
 main :: IO ()
-main = createFolder "image" >> serial >>= mapM_ saveImage
+main = createFolder "image" >> serial 
 
 createFolder :: FilePath -> IO ()
 createFolder = createDirectoryIfMissing True
@@ -28,13 +29,13 @@ saveImage (filepath, rawData) = do
     hSetBuffering h (BlockBuffering Nothing)
     hPutStr h rawData
 
-singleReq :: Req (Post) -> IO ((FilePath, BinaryContent))
-singleReq r = runReq def $ r >>= downloadPost "image"
+getPosts :: Option Https -> IO [Post]
+getPosts option = runReq def $
+  reqPosts (https "konachan.com" /: "post.json") option
 
-serial :: IO ([DownloadResult])
+downloadPost :: Post -> IO ()
+downloadPost p = (runReq def $ reqPost "image" p) >>= saveImage
+
+serial :: IO ()
 serial =
-  runReq def $
-  getPosts
-    (https "konachan.com" /: "post.json")
-    (mkParams [("tags", "rating:safe")]) >>=
-  downloadPosts "image"
+  getPosts (mkParams [tags ["touhou", rating "safe"]]) >>= mapM_ downloadPost

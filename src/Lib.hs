@@ -3,7 +3,6 @@
 module Lib where
 
 import Data.Sequence
-import Data.Monoid
 import Data.List.Split (splitOn)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
@@ -22,7 +21,6 @@ data Post = Post
   , fileUrl :: String
   , previewUrl :: String
   } deriving (Show)
-type Posts = [Post]
 
 instance FromJSON Post where
   parseJSON =
@@ -34,20 +32,21 @@ getUrl p = previewUrl p
 
 type DownloadResult = (FilePath, BinaryContent)
 
-mkParams :: (QueryParam param, Monoid param) => [(String, String)] -> param
-mkParams params = foldr step (queryFlag "a") params
-  where
-    step (k, v) q = (T.pack k =: v) <> q
-
-getPosts :: Url a -> Option a -> Req (Posts)
-getPosts url option = do
+reqPosts :: Url a -> Option a -> Req [Post]
+reqPosts url option = do
   r <- req GET url NoReqBody lbsResponse option
-  case eitherDecode $ responseBody r :: Either String Posts of
+  case (eitherDecode $ responseBody r) :: Either String [Post] of
     Left e -> fail e
     Right result -> return result
 
-getImage :: String -> Req (BinaryContent)
-getImage imageUrl =
+reqPost :: FilePath -> Post -> Req DownloadResult
+reqPost base p = do
+  let path = getImagePath base p
+  rawData <- reqImage (getUrl p)
+  return (path, rawData)
+
+reqImage :: String -> Req (BinaryContent)
+reqImage imageUrl =
   case (parseUrlHttps $ B.pack imageUrl) of
     Nothing -> fail "Parse URL Error"
     Just (url, option) -> do
@@ -58,11 +57,3 @@ getImagePath :: FilePath -> Post -> FilePath
 getImagePath base post =
   base </> (md5 post) ++ '.' : (last $ splitOn "." (getUrl post))
 
-downloadPost :: FilePath -> Post -> Req (DownloadResult)
-downloadPost base p = do
-  let path = getImagePath base p
-  rawData <- getImage (getUrl p)
-  return (path, rawData)
-
-downloadPosts :: FilePath -> Posts -> Req [(DownloadResult)]
-downloadPosts base ps = mapM (downloadPost base) ps
