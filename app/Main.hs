@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, DataKinds #-}
+{-# LANGUAGE OverloadedStrings, DataKinds, LambdaCase #-}
 
 module Main where
 
@@ -38,12 +38,17 @@ getPosts option =
 
 getPostsChan :: Option Https -> IO (TMQueue Post)
 getPostsChan option = do
-  ps <- getPosts option
-  atomically $ do
-    tq <- newTMQueue
-    mapM_ (writeTMQueue tq) ps
-    closeTMQueue tq
-    return tq
+  tq <- atomically $ newTMQueue
+  forkIO (loop 1 tq)
+  return tq
+  where
+    loop :: Int -> TMQueue Post -> IO ()
+    loop page tq =
+      getPosts (option <> "page" =: page) >>= \case
+        [] -> atomically $ closeTMQueue tq
+        ps -> do
+          atomically $ mapM_ (writeTMQueue tq) ps
+          loop (page + 1) tq
 
 downloadPost :: Post -> IO ()
 downloadPost p = (runReq def $ reqPost "image" p) >>= saveImage
