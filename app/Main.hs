@@ -14,6 +14,7 @@ import qualified Control.Concurrent.Thread.Group as ThreadGroup
 
 import System.IO hiding (hPutStr)
 import System.Directory
+import System.Console.AsciiProgress
 
 import Data.Monoid
 import qualified Data.Text as T
@@ -26,9 +27,7 @@ import Options.Applicative (execParser)
 
 main :: IO ()
 main =
-  execParser opts >>= return . parseOpts >>=
-  parallel >>= takeMVar >>
-  return ()
+  execParser opts >>= return . parseOpts >>= parallel >>= takeMVar >> return ()
 
 createFolder :: FilePath -> IO ()
 createFolder = createDirectoryIfMissing True
@@ -58,17 +57,25 @@ getPostsChan option = do
           forkIO $ loop (page + 1) tq
           atomically $ mapM_ (writeTMQueue tq) ps
 
+getTotal :: Option Https -> IO (Int)
+getTotal option = do
+  runReq httpConfig $
+    reqTotal (https "konachan.com" /: "post.xml") option
+
 downloadPost :: FilePath -> Post -> IO ()
 downloadPost f p = (runReq httpConfig $ reqPost f p) >>= saveImage
 
 serial :: IO ()
-serial =
-  getPosts (mkParams [tags ["touhou", rating "safe"]]) >>=
-  (mapM_ $ downloadPost "images")
+serial = do
+  pbar <- newProgressBar def
+  ps <- getPosts (mkParams [tags ["touhou", rating "safe"]])
+  mapM_ (downloadPost "images") ps
 
 parallel :: (Option Https, Int, FilePath)-> IO (MVar Bool)
 parallel (options, maxWorker, outputFolder) = do
   createFolder outputFolder
+  total <- getTotal options
+  pbar <- newProgressBar def {pgTotal = fromIntegral total}
   tq <- getPostsChan options
   term <- newEmptyMVar
   forkIO $ loop tq term

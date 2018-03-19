@@ -1,15 +1,17 @@
-{-# LANGUAGE OverloadedStrings, DataKinds #-}
+{-# LANGUAGE OverloadedStrings, DataKinds, QuasiQuotes #-}
 
 module Lib
   ( Post
   , DownloadResult
   , reqPost
   , reqPosts
+  , reqTotal
   , httpConfig
   , opts
   , parseOpts
   ) where
 
+import Utils ((==:))
 import qualified Utils as U
 
 import Control.Retry
@@ -21,9 +23,11 @@ import Data.List.Split (splitOn)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as LB
 import qualified Data.ByteString.Lazy as BS
 import Data.Aeson hiding (Parser)
 import Data.Aeson.Types hiding (Parser)
+import Text.Regex.PCRE.Heavy
 
 import System.FilePath
 
@@ -46,10 +50,22 @@ instance FromJSON Post where
     withObject "post" $ \o ->
       Post <$> o .: "md5" <*> o .: "file_url" <*> o .: "preview_url"
 
+
 getUrl :: Post -> String
-getUrl p = previewUrl p
+getUrl p = fileUrl p
 
 type DownloadResult = (FilePath, BinaryContent)
+
+reqTotal :: Url a -> Option a -> Req Int
+reqTotal url option =
+  req GET url NoReqBody lbsResponse (option <> "limit" ==: "1") >>= parse . responseBody
+  where
+    parse :: LB.ByteString -> Req Int
+    parse lb =
+      case result lb of
+        Just (total, _) -> return total
+        Nothing -> fail "Unable to retrieve total posts!"
+    result = LB.readInt . head . snd . head . scan [re|count="(\d+)"|]
 
 reqPosts :: Url a -> Option a -> Req [Post]
 reqPosts url option = do

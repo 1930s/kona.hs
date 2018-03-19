@@ -37,6 +37,8 @@ dependencies:
 - threads
 - retry
 - optparse-applicative
+- ascii-progress
+- pcre-heavy
 
 library:
   source-dirs: src
