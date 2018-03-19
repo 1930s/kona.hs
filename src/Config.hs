@@ -15,6 +15,7 @@ import qualified Network.HTTP.Types as Y
 data CrawlerConfig =
   CrawlerConfig (Option Https) -- Query
                 Int -- Max workers
+                Int -- Limit
                 PostConfig
 
 data PostConfig =

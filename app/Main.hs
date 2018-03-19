@@ -34,12 +34,16 @@ main = displayConsoleRegions $
 parallel :: CrawlerConfig -> IO (MVar Bool)
 parallel (CrawlerConfig options
                         maxWorker
+                        limit
                         config@(PostConfig _ outputFolder httpConfig)
          ) = do
   exSet <- prepare outputFolder
 
   total <- getTotal options
-  pbar <- newProgressBar $ progressBar total
+  pbar <- newProgressBar $ progressBar $
+    case limit of
+      0 -> total
+      _ -> limit
 
   tq <- getPosts httpConfig options exSet
   tg <- ThreadGroup.new

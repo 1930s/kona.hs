@@ -23,6 +23,9 @@ tags tlist = ("tags", foldr step "" tlist)
 rating :: String -> String
 rating r = "rating:" ++ r
 
+order :: String -> String
+order o = "order:" ++ o
+
 type ExclusionSet = TVar (Set String)
 
 mkExclusionSet :: [String] -> STM ExclusionSet

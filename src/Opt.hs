@@ -18,10 +18,12 @@ data Opt =
   Opt [String] -- Tags
       String -- Kind
       String -- Rating
+      String -- Order
       Int -- Max worker
       FilePath -- Output
       Int -- Delay
       Int -- Retries
+      Int -- Limit
 
 opt :: Parser Opt
 opt =
@@ -47,6 +49,15 @@ opt =
      completeWith kinds <>
      metavar "KIND") <*>
   option
+    (eitherReader $ checkWithin orders)
+    (long "order" <> short 'O' <>
+     help "Order of the posts. \
+          \Choose from: id, id_desc, score, score_asc, mpixels, mpixels_asc" <>
+     showDefault <>
+     value "score" <>
+     completeWith orders <>
+     metavar "ORDER") <*>
+  option
     auto
     (long "max_worker" <> short 'w' <>
      help "Limit numbers of task in parallel" <>
@@ -69,7 +80,15 @@ opt =
      help "Retry RETRIES times, otherwise the program will fail" <>
      showDefault <>
      value 5 <>
-     metavar "RETRIES")
+     metavar "RETRIES") <*>
+  option
+    auto
+    (long "limit" <> short 'l' <>
+     help "Numbers of image to download, 0 for all" <>
+     showDefault <>
+     value 0 <>
+     metavar "LIMIT"
+    )
   where
     ratings =
       [ "safe"
@@ -79,6 +98,7 @@ opt =
       , "questionableplus"
       ]
     kinds = ["preview", "sample", "origin"]
+    orders = ["id", "id_desc", "score", "score_asc", "mpixels", "mpixels_asc"]
     checkWithin sets v
       | v `elem` sets = Right v
       | otherwise = Left $ "Unknown parameter: " ++ v
@@ -88,8 +108,9 @@ opts = info (opt <**> helper)
   <> progDesc "Download all images about TAGS"
   <> header ("kona " ++ showVersion version ++ " – A Crawler for Konachan.com"))
 
-parseOpts (Opt t r k w o d retries) =
+parseOpts (Opt tag rtg knd ord workers out delay retries limit) =
   CrawlerConfig
-    (mkParams [tags (rating r : t)])
-    w
-    (PostConfig k o (httpConfig d retries))
+    (mkParams [tags (rating rtg : order ord : tag)])
+    workers
+    limit
+    (PostConfig knd out (httpConfig delay retries))
