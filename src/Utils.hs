@@ -6,15 +6,15 @@ import Data.Monoid
 import qualified Data.Text as T
 import Data.HashSet
 
-import Network.HTTP.Req
+import Network.HTTP.Req hiding ((=:))
 
-(==:) :: (QueryParam p) => String -> String -> p
-(==:) k v = T.pack k =: v
+(=:) :: (QueryParam p) => String -> String -> p
+(=:) k v = queryParam (T.pack k) (pure v)
 
 mkParams :: (QueryParam param, Monoid param) => [(String, String)] -> param
 mkParams params = foldr step mempty params
   where
-    step (k, v) q = k ==: v <> q
+    step (k, v) q = k =: v <> q
 
 tags :: [String] -> (String, String)
 tags tlist = ("tags", foldr step "" tlist)

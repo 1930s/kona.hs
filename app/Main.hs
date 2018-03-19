@@ -4,6 +4,8 @@ module Main where
 
 import Lib
 import Utils
+import Opt
+import Config
 
 import Control.Monad
 import Control.Monad.IO.Class
@@ -22,50 +24,12 @@ import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Lazy (hPutStr)
 
-import Network.HTTP.Req
+import Network.HTTP.Req hiding ((=:))
 import Options.Applicative (execParser)
 
 main :: IO ()
 main = displayConsoleRegions $
   execParser opts >>= return . parseOpts >>= parallel >>= takeMVar >> return ()
-
-prepare :: FilePath -> IO (ExclusionSet)
-prepare output =
-  createDirectoryIfMissing True output >> listDirectory output >>=
-  return . map takeBaseName >>=
-  atomically . mkExclusionSet
-
-saveImage :: DownloadResult -> IO ()
-saveImage (filepath, rawData) = do
-  withBinaryFile filepath WriteMode $ \h -> do
-    hSetBuffering h (BlockBuffering Nothing)
-    hPutStr h rawData
-
-getPosts :: HttpConfig -> Option Https -> ExclusionSet -> IO (TMQueue Post)
-getPosts httpConfig option exSet = do
-  tq <- atomically $ newTMQueue
-  tg <- ThreadGroup.new
-  forkIO $ loop 1 tq
-  return tq
-  where
-    loop :: Int -> TMQueue Post -> IO ()
-    loop page tq =
-      (runReq httpConfig $
-       reqPosts (https "konachan.com" /: "post.json")
-                (option <> "page" =: page)) >>= \case
-        [] -> atomically $ closeTMQueue tq
-        ps -> do
-          atomically $ filterMember exSet ps >>= mapM_ (writeTMQueue tq)
-          loop (page + 1) tq
-
-getTotal :: Option Https -> IO (Int)
-getTotal options = do
-  runReq (httpConfig 0 0) $
-    reqTotal (https "konachan.com" /: "post.xml") options
-
-downloadPost :: PostConfig -> ProgressBar -> Post -> IO ()
-downloadPost (PostConfig kind output config) pbar p =
-  (runReq config $ reqPost kind output p) >>= saveImage >> tick pbar
 
 parallel :: CrawlerConfig -> IO (MVar Bool)
 parallel (CrawlerConfig options
@@ -101,3 +65,41 @@ parallel (CrawlerConfig options
     limitThreads limit tg =
       atomically (ThreadGroup.nrOfRunning tg) >>= \num ->
         when (num >= limit) $ ThreadGroup.waitN (limit `div` 2) tg
+
+prepare :: FilePath -> IO (ExclusionSet)
+prepare output =
+  createDirectoryIfMissing True output >> listDirectory output >>=
+  return . map takeBaseName >>=
+  atomically . mkExclusionSet
+
+getTotal :: Option Https -> IO (Int)
+getTotal options = do
+  runReq (httpConfig 0 0) $
+    reqTotal (https "konachan.com" /: "post.xml") options
+
+getPosts :: HttpConfig -> Option Https -> ExclusionSet -> IO (TMQueue Post)
+getPosts httpConfig option exSet = do
+  tq <- atomically $ newTMQueue
+  tg <- ThreadGroup.new
+  forkIO $ loop 1 tq
+  return tq
+  where
+    loop :: Int -> TMQueue Post -> IO ()
+    loop page tq =
+      (runReq httpConfig $
+       reqPosts (https "konachan.com" /: "post.json")
+                (option <> queryParam "page" (pure page))) >>= \case
+        [] -> atomically $ closeTMQueue tq
+        ps -> do
+          atomically $ filterMember exSet ps >>= mapM_ (writeTMQueue tq)
+          loop (page + 1) tq
+
+downloadPost :: PostConfig -> ProgressBar -> Post -> IO ()
+downloadPost (PostConfig kind output config) pbar p =
+  (runReq config $ reqPost kind output p) >>= saveImage >> tick pbar
+
+saveImage :: DownloadResult -> IO ()
+saveImage (filepath, rawData) = do
+  withBinaryFile filepath WriteMode $ \h -> do
+    hSetBuffering h (BlockBuffering Nothing)
+    hPutStr h rawData
