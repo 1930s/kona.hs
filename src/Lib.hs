@@ -18,8 +18,9 @@ module Lib
 import Utils ((==:))
 import qualified Utils as U
 
-import Control.Retry
+import Paths_kona (version)
 
+import Control.Retry
 import Control.Concurrent.STM
 
 import Data.Monoid
@@ -33,6 +34,7 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.HashSet as HS
 import Data.Aeson hiding (Parser)
 import Data.Aeson.Types hiding (Parser)
+import Data.Version (showVersion)
 
 import Text.Regex.PCRE.Heavy
 
@@ -189,8 +191,8 @@ opt =
 
 opts = info (opt <**> helper)
   ( fullDesc
-  <> progDesc "Download all images of TAGS"
-  <> header "kona – A Crawler for Konachan.com")
+  <> progDesc "Download all images about TAGS"
+  <> header ("kona " ++ showVersion version ++ " – A Crawler for Konachan.com"))
 
 data CrawlerConfig =
   CrawlerConfig (Option Https) -- Query
