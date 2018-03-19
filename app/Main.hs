@@ -5,7 +5,6 @@ module Main where
 import Lib
 import Utils
 
-import Control.Retry
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Concurrent
@@ -22,25 +21,15 @@ import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Lazy (hPutStr)
 import Data.Sequence
 
-import Data.Default
 import Network.HTTP.Req
-import Network.HTTP.Client
-import qualified Network.HTTP.Types as Y
-
-import Options.Applicative
-
-httpConfig :: HttpConfig
-httpConfig =
-  def
-  { httpConfigRetryPolicy = exponentialBackoff 5000 <> limitRetries 5
-  , httpConfigRetryJudge = judge
-  }
-  where
-    judge _ response = statusCode response `elem` [408, 504, 524, 598, 599, 503]
-    statusCode = Y.statusCode . responseStatus
+import Options.Applicative (execParser)
 
 main :: IO ()
-main = createFolder "image" >> parallel 0 >>= readMVar >> return ()
+main =
+  createFolder "image" >>
+  execParser opts >>= return . parseOpts >>=
+  parallel >>= takeMVar >>
+  return ()
 
 createFolder :: FilePath -> IO ()
 createFolder = createDirectoryIfMissing True
@@ -77,9 +66,9 @@ serial :: IO ()
 serial =
   getPosts (mkParams [tags ["touhou", rating "safe"]]) >>= mapM_ downloadPost
 
-parallel :: Int -> IO (MVar Bool)
-parallel maxWorker = do
-  tq <- getPostsChan (mkParams [tags ["touhou", rating "safe"]])
+parallel :: (Option Https, Int)-> IO (MVar Bool)
+parallel (options, maxWorker) = do
+  tq <- getPostsChan options
   term <- newEmptyMVar
   forkIO $ loop tq term
   return term
