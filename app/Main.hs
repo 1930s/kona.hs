@@ -26,7 +26,6 @@ import Options.Applicative (execParser)
 
 main :: IO ()
 main =
-  createFolder "image" >>
   execParser opts >>= return . parseOpts >>=
   parallel >>= takeMVar >>
   return ()
@@ -59,15 +58,17 @@ getPostsChan option = do
           forkIO $ loop (page + 1) tq
           atomically $ mapM_ (writeTMQueue tq) ps
 
-downloadPost :: Post -> IO ()
-downloadPost p = (runReq httpConfig $ reqPost "image" p) >>= saveImage
+downloadPost :: FilePath -> Post -> IO ()
+downloadPost f p = (runReq httpConfig $ reqPost f p) >>= saveImage
 
 serial :: IO ()
 serial =
-  getPosts (mkParams [tags ["touhou", rating "safe"]]) >>= mapM_ downloadPost
+  getPosts (mkParams [tags ["touhou", rating "safe"]]) >>=
+  (mapM_ $ downloadPost "images")
 
-parallel :: (Option Https, Int)-> IO (MVar Bool)
-parallel (options, maxWorker) = do
+parallel :: (Option Https, Int, FilePath)-> IO (MVar Bool)
+parallel (options, maxWorker, outputFolder) = do
+  createFolder outputFolder
   tq <- getPostsChan options
   term <- newEmptyMVar
   forkIO $ loop tq term
@@ -78,7 +79,8 @@ parallel (options, maxWorker) = do
       p <- atomically $ readTMQueue tq
       case p of
         Just post -> do
-          limitThreads maxWorker tg >> ThreadGroup.forkIO tg (downloadPost post)
+          limitThreads maxWorker tg >>
+            ThreadGroup.forkIO tg (downloadPost outputFolder post)
           loop tq term
         Nothing -> do
           ThreadGroup.wait tg

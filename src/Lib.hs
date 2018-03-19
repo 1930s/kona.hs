@@ -47,7 +47,7 @@ instance FromJSON Post where
       Post <$> o .: "md5" <*> o .: "file_url" <*> o .: "preview_url"
 
 getUrl :: Post -> String
-getUrl p = fileUrl p
+getUrl p = previewUrl p
 
 type DownloadResult = (FilePath, BinaryContent)
 
@@ -79,7 +79,7 @@ getImagePath base post =
 httpConfig :: HttpConfig
 httpConfig =
   def
-  { httpConfigRetryPolicy = exponentialBackoff 5000 <> limitRetries 5
+  { httpConfigRetryPolicy = exponentialBackoff 100000 -- <> limitRetries 5
   , httpConfigRetryJudge = judge
   }
   where
@@ -90,6 +90,7 @@ data Opt = Opt
   { tags :: [String]
   , rating :: String
   , maxWorker :: Int
+  , outputFolder :: String
   }
 
 opt :: Parser Opt
@@ -97,7 +98,8 @@ opt =
   Opt <$> some (argument str (metavar "TAGS...")) <*>
   option
     (eitherReader checkRating)
-    (long "rating" <> short 'r' <> help "Rating of the images" <> showDefault <>
+    (long "rating" <> short 'r' <> help "Hentainess of the images" <>
+     showDefault <>
      value "safe" <>
      completeWith ratings <>
      metavar "RATING") <*>
@@ -106,7 +108,12 @@ opt =
     (long "max_worker" <> short 'w' <> help "Limit threads number" <>
      showDefault <>
      value 16 <>
-     metavar "MAX_WORKER")
+     metavar "MAX_WORKER") <*>
+  strOption
+    (long "output" <> short 'o' <> help "Output path" <>
+     showDefault <>
+     value "images" <>
+     metavar "OUTPUT")
   where
     ratings =
       [ "safe"
@@ -124,5 +131,5 @@ opts = info (opt <**> helper)
   <> progDesc "Download all images of TAGS"
   <> header "kona – A Crawler for Konachan.com")
 
-parseOpts :: Opt -> (Option Https, Int)
-parseOpts (Opt t r w) = (U.mkParams [U.tags (U.rating r : t)], w)
+parseOpts :: Opt -> (Option Https, Int, FilePath)
+parseOpts (Opt t r w o) = (U.mkParams [U.tags (U.rating r : t)], w, o)
