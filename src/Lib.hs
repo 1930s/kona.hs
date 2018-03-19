@@ -3,6 +3,8 @@
 module Lib
   ( Post
   , DownloadResult
+  , PostConfig(..)
+  , CrawlerConfig(..)
   , reqPost
   , reqPosts
   , reqTotal
@@ -45,22 +47,29 @@ data Post = Post
   { md5 :: String
   , fileUrl :: String
   , previewUrl :: String
+  , sampleUrl :: String
   } deriving (Show)
 
 instance FromJSON Post where
   parseJSON =
     withObject "post" $ \o ->
-      Post <$> o .: "md5" <*> o .: "file_url" <*> o .: "preview_url"
+      Post <$> o .: "md5" <*>
+               o .: "file_url" <*>
+               o .: "preview_url" <*>
+               o .: "sample_url"
 
 
-getUrl :: Post -> String
-getUrl p = fileUrl p
+getUrl :: String -> Post -> String
+getUrl "preview" p = previewUrl p
+getUrl "sample" p = sampleUrl p
+getUrl "origin" p = fileUrl p
 
 type DownloadResult = (FilePath, BinaryContent)
 
 reqTotal :: Url a -> Option a -> Req Int
 reqTotal url option =
-  req GET url NoReqBody lbsResponse (option <> "limit" ==: "1") >>= parse . responseBody
+  req GET url NoReqBody lbsResponse (option <> "limit" ==: "1") >>=
+  parse . responseBody
   where
     parse :: LB.ByteString -> Req Int
     parse lb =
@@ -76,10 +85,10 @@ reqPosts url option = do
     Left e -> fail e
     Right result -> return result
 
-reqPost :: FilePath -> Post -> Req DownloadResult
-reqPost base p = do
-  let path = getImagePath base p
-  rawData <- reqImage (getUrl p)
+reqPost :: String -> FilePath -> Post -> Req DownloadResult
+reqPost kind base p = do
+  let path = getImagePath base kind p
+  rawData <- reqImage (getUrl kind p)
   return (path, rawData)
 
 reqImage :: String -> Req (BinaryContent)
@@ -90,48 +99,77 @@ reqImage imageUrl =
       r <- req GET url NoReqBody lbsResponse option
       return $ responseBody r
 
-getImagePath :: FilePath -> Post -> FilePath
-getImagePath base post =
-  base </> (md5 post) ++ '.' : (last $ splitOn "." (getUrl post))
+getImagePath :: FilePath -> String -> Post -> FilePath
+getImagePath base kind post =
+  base </> (md5 post) ++ '.' : (last $ splitOn "." (getUrl kind post))
 
-httpConfig :: HttpConfig
-httpConfig =
+httpConfig :: Int -> Int -> HttpConfig
+httpConfig delay retries =
   def
-  { httpConfigRetryPolicy = exponentialBackoff 100000 <> limitRetries 5
+  { httpConfigRetryPolicy = exponentialBackoff (delay * 1000) <> -- Convert to microseconds
+                            limitRetries retries
   , httpConfigRetryJudge = judge
   }
   where
     judge _ response = statusCode response `elem` [408, 504, 524, 598, 599, 503]
     statusCode = Y.statusCode . L.responseStatus
 
-data Opt = Opt
-  { tags :: [String]
-  , rating :: String
-  , maxWorker :: Int
-  , outputFolder :: String
-  }
+data Opt =
+  Opt [String] -- Tags
+      String -- Kind
+      String -- Rating
+      Int -- Max worker
+      FilePath -- Output
+      Int -- Delay
+      Int -- Retries
 
 opt :: Parser Opt
 opt =
   Opt <$> some (argument str (metavar "TAGS...")) <*>
   option
-    (eitherReader checkRating)
-    (long "rating" <> short 'r' <> help "Hentainess of the images" <>
+    (eitherReader $ checkWithin ratings)
+    (long "rating" <> short 'r' <>
+     help
+       "Hentainess of the images. \
+       \Choose from: safe, questionable, explict, \
+       \questionableminus, questionableplus" <>
      showDefault <>
      value "safe" <>
      completeWith ratings <>
      metavar "RATING") <*>
   option
+    (eitherReader $ checkWithin kinds)
+    (long "kind" <> short 'k' <>
+     help "Kind of image to download. \
+          \Choose from: preview, sample, origin" <>
+     showDefault <>
+     value "origin" <>
+     completeWith kinds <>
+     metavar "KIND") <*>
+  option
     auto
-    (long "max_worker" <> short 'w' <> help "Limit threads number" <>
+    (long "max_worker" <> short 'w' <>
+     help "Limit numbers of task in parallel" <>
      showDefault <>
      value 16 <>
      metavar "MAX_WORKER") <*>
   strOption
-    (long "output" <> short 'o' <> help "Output path" <>
-     showDefault <>
+    (long "output" <> short 'o' <> help "Output path" <> showDefault <>
      value "images" <>
-     metavar "OUTPUT")
+     metavar "OUTPUT") <*>
+  option
+    auto
+    (long "delay" <> short 'd' <> help "Start next try after DELAY ms" <>
+     showDefault <>
+     value 100 <>
+     metavar "DELAY") <*>
+  option
+    auto
+    (long "retries" <>
+     help "Retry RETRIES times, otherwise the program will fail" <>
+     showDefault <>
+     value 5 <>
+     metavar "RETRIES")
   where
     ratings =
       [ "safe"
@@ -140,17 +178,31 @@ opt =
       , "questionableminus"
       , "questionableplus"
       ]
-    checkRating r
-      | r `elem` ratings = Right r
-      | otherwise = Left $ "Unknown rating: " ++ r
+    kinds = ["preview", "sample", "origin"]
+    checkWithin sets v
+      | v `elem` sets = Right v
+      | otherwise = Left $ "Unknown parameter: " ++ v
 
 opts = info (opt <**> helper)
   ( fullDesc
   <> progDesc "Download all images of TAGS"
   <> header "kona – A Crawler for Konachan.com")
 
-parseOpts :: Opt -> (Option Https, Int, FilePath)
-parseOpts (Opt t r w o) = (U.mkParams [U.tags (U.rating r : t)], w, o)
+data CrawlerConfig =
+  CrawlerConfig (Option Https) -- Query
+                Int -- Max workers
+                PostConfig
+
+data PostConfig =
+  PostConfig String -- Kind
+             FilePath -- Output path
+             HttpConfig -- HttpConfig
+
+parseOpts (Opt t r k w o d retries) =
+  CrawlerConfig
+    (U.mkParams [U.tags (U.rating r : t)])
+    w
+    (PostConfig k o (httpConfig d retries))
 
 progressBar :: Int -> System.Console.AsciiProgress.Options
 progressBar total =

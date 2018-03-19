@@ -40,7 +40,7 @@ saveImage (filepath, rawData) = do
 
 getPosts :: Option Https -> IO [Post]
 getPosts option =
-  runReq httpConfig $
+  runReq (httpConfig 50 5) $
   reqPosts (https "konachan.com" /: "post.json") option
 
 getPostsChan :: Option Https -> IO (TMQueue Post)
@@ -60,22 +60,25 @@ getPostsChan option = do
 
 getTotal :: Option Https -> IO (Int)
 getTotal options = do
-  runReq httpConfig $
+  runReq (httpConfig 0 0) $
     reqTotal (https "konachan.com" /: "post.xml") options
 
-downloadPost :: FilePath -> ProgressBar -> Post -> IO ()
-downloadPost f pbar p =
-  (runReq httpConfig $ reqPost f p) >>= saveImage >> tick pbar
+downloadPost :: PostConfig -> ProgressBar -> Post -> IO ()
+downloadPost (PostConfig kind output config) pbar p =
+  (runReq config $ reqPost kind output p) >>= saveImage >> tick pbar
 
-serial :: Option Https -> IO ()
-serial options = do
+serial :: CrawlerConfig -> IO ()
+serial (CrawlerConfig options _ config) = do
   total <- getTotal options
   pbar <- newProgressBar def
   ps <- getPosts options
-  mapM_ (downloadPost "images" pbar) ps
+  mapM_ (downloadPost config pbar) ps
 
-parallel :: (Option Https, Int, FilePath)-> IO (MVar Bool)
-parallel (options, maxWorker, outputFolder) = do
+parallel :: CrawlerConfig -> IO (MVar Bool)
+parallel (CrawlerConfig options
+                        maxWorker
+                        config@(PostConfig _ outputFolder _)
+         ) = do
   createFolder outputFolder
   total <- getTotal options
   pbar <- newProgressBar $ progressBar total
@@ -90,7 +93,9 @@ parallel (options, maxWorker, outputFolder) = do
       case p of
         Just post -> do
           limitThreads maxWorker tg >>
-            ThreadGroup.forkIO tg (downloadPost outputFolder pbar post)
+            ThreadGroup.forkIO
+              tg
+              (downloadPost config pbar post)
           loop tq tg term pbar
         Nothing -> do
           ThreadGroup.wait tg
