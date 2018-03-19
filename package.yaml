@@ -22,6 +22,8 @@ description:         Please see the README on Github at <https://github.com/gith
 dependencies:
 - base >= 4.7 && < 5
 - aeson
+- http-client
+- http-types
 - req
 - data-default
 - containers
@@ -32,6 +34,9 @@ dependencies:
 - directory
 - stm
 - stm-chans
+- threads
+- retry
+- optparse-applicative
 
 library:
   source-dirs: src

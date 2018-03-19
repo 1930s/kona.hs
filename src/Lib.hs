@@ -28,7 +28,7 @@ instance FromJSON Post where
       Post <$> o .: "md5" <*> o .: "file_url" <*> o .: "preview_url"
 
 getUrl :: Post -> String
-getUrl p = previewUrl p
+getUrl p = fileUrl p
 
 type DownloadResult = (FilePath, BinaryContent)
 
