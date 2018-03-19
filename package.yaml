@@ -1,5 +1,5 @@
 name:                kona
-version:             0.1.0.0
+version:             1.0.0.0
 github:              "inflation/kona.hs"
 license:             GPL-3
 author:              "Inflation"
@@ -17,7 +17,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on Github at <https://github.com/githubuser/kona.hs#readme>
+description:         Please see the README on Github at <https://github.com/inflation/kona.hs#kona>
 
 dependencies:
 - base >= 4.7 && < 5
@@ -50,9 +50,9 @@ executables:
     source-dirs:         app
     ghc-options:
     - -threaded
+    - -O2
     - -rtsopts
     - -with-rtsopts=-N
-    - -eventlog
     dependencies:
     - kona
 
