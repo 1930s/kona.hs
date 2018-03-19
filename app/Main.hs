@@ -26,7 +26,7 @@ import Network.HTTP.Req
 import Options.Applicative (execParser)
 
 main :: IO ()
-main =
+main = displayConsoleRegions $
   execParser opts >>= return . parseOpts >>= parallel >>= takeMVar >> return ()
 
 createFolder :: FilePath -> IO ()
@@ -46,7 +46,8 @@ getPosts option =
 getPostsChan :: Option Https -> IO (TMQueue Post)
 getPostsChan option = do
   tq <- atomically $ newTMQueue
-  forkIO (loop 1 tq)
+  tg <- ThreadGroup.new
+  forkIO $ loop 1 tq
   return tq
   where
     loop :: Int -> TMQueue Post -> IO ()
@@ -54,43 +55,46 @@ getPostsChan option = do
       getPosts (option <> "page" =: page) >>= \case
         [] -> atomically $ closeTMQueue tq
         ps -> do
-          forkIO $ loop (page + 1) tq
           atomically $ mapM_ (writeTMQueue tq) ps
+          loop (page + 1) tq
 
 getTotal :: Option Https -> IO (Int)
-getTotal option = do
+getTotal options = do
   runReq httpConfig $
-    reqTotal (https "konachan.com" /: "post.xml") option
+    reqTotal (https "konachan.com" /: "post.xml") options
 
-downloadPost :: FilePath -> Post -> IO ()
-downloadPost f p = (runReq httpConfig $ reqPost f p) >>= saveImage
+downloadPost :: FilePath -> ProgressBar -> Post -> IO ()
+downloadPost f pbar p =
+  (runReq httpConfig $ reqPost f p) >>= saveImage >> tick pbar
 
-serial :: IO ()
-serial = do
+serial :: Option Https -> IO ()
+serial options = do
+  total <- getTotal options
   pbar <- newProgressBar def
-  ps <- getPosts (mkParams [tags ["touhou", rating "safe"]])
-  mapM_ (downloadPost "images") ps
+  ps <- getPosts options
+  mapM_ (downloadPost "images" pbar) ps
 
 parallel :: (Option Https, Int, FilePath)-> IO (MVar Bool)
 parallel (options, maxWorker, outputFolder) = do
   createFolder outputFolder
   total <- getTotal options
-  pbar <- newProgressBar def {pgTotal = fromIntegral total}
+  pbar <- newProgressBar $ progressBar total
   tq <- getPostsChan options
   term <- newEmptyMVar
-  forkIO $ loop tq term
+  tg <- ThreadGroup.new
+  forkIO $ loop tq tg term pbar
   return term
   where
-    loop tq term = do
-      tg <- ThreadGroup.new
+    loop tq tg term pbar = do
       p <- atomically $ readTMQueue tq
       case p of
         Just post -> do
           limitThreads maxWorker tg >>
-            ThreadGroup.forkIO tg (downloadPost outputFolder post)
-          loop tq term
+            ThreadGroup.forkIO tg (downloadPost outputFolder pbar post)
+          loop tq tg term pbar
         Nothing -> do
           ThreadGroup.wait tg
+          complete pbar
           putMVar term True
     limitThreads limit tg =
       atomically (ThreadGroup.nrOfRunning tg) >>= \num ->

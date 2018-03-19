@@ -9,6 +9,7 @@ module Lib
   , httpConfig
   , opts
   , parseOpts
+  , progressBar
   ) where
 
 import Utils ((==:))
@@ -30,6 +31,7 @@ import Data.Aeson.Types hiding (Parser)
 import Text.Regex.PCRE.Heavy
 
 import System.FilePath
+import System.Console.AsciiProgress
 
 import Network.HTTP.Req hiding (header)
 import qualified Network.HTTP.Client as L
@@ -69,7 +71,7 @@ reqTotal url option =
 
 reqPosts :: Url a -> Option a -> Req [Post]
 reqPosts url option = do
-  r <- req GET url NoReqBody lbsResponse option
+  r <- req GET url NoReqBody lbsResponse (option <> "limit" ==: "10")
   case (eitherDecode $ responseBody r) :: Either String [Post] of
     Left e -> fail e
     Right result -> return result
@@ -95,7 +97,7 @@ getImagePath base post =
 httpConfig :: HttpConfig
 httpConfig =
   def
-  { httpConfigRetryPolicy = exponentialBackoff 100000 -- <> limitRetries 5
+  { httpConfigRetryPolicy = exponentialBackoff 100000 <> limitRetries 5
   , httpConfigRetryJudge = judge
   }
   where
@@ -149,3 +151,14 @@ opts = info (opt <**> helper)
 
 parseOpts :: Opt -> (Option Https, Int, FilePath)
 parseOpts (Opt t r w o) = (U.mkParams [U.tags (U.rating r : t)], w, o)
+
+progressBar :: Int -> System.Console.AsciiProgress.Options
+progressBar total =
+  def
+  { pgFormat = "Finished :percent :bar :current/:total " ++
+               "(elapsed :elapseds, :etas remaining)"
+  , pgCompletedChar = '█'
+  , pgPendingChar = '▁'
+  , pgTotal = fromIntegral total
+  , pgOnCompletion = Just "Done :percent after :elapsed seconds"
+  }
