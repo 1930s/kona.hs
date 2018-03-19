@@ -12,6 +12,7 @@ module Lib
   , opts
   , parseOpts
   , progressBar
+  , filterMember
   ) where
 
 import Utils ((==:))
@@ -19,17 +20,20 @@ import qualified Utils as U
 
 import Control.Retry
 
+import Control.Concurrent.STM
+
 import Data.Monoid
 import Data.Default
-import Data.Sequence
 import Data.List.Split (splitOn)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as LB
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.HashSet as HS
 import Data.Aeson hiding (Parser)
 import Data.Aeson.Types hiding (Parser)
+
 import Text.Regex.PCRE.Heavy
 
 import System.FilePath
@@ -214,3 +218,7 @@ progressBar total =
   , pgTotal = fromIntegral total
   , pgOnCompletion = Just "Done :percent after :elapsed seconds"
   }
+
+filterMember :: U.ExclusionSet -> [Post] -> STM [Post]
+filterMember exSet ps =
+  readTVar exSet >>= \set -> return $ filter (\p -> HS.notMember (md5 p) set) ps

@@ -1,7 +1,10 @@
 module Utils where
 
+import Control.Concurrent.STM
+
 import Data.Monoid
 import qualified Data.Text as T
+import Data.HashSet
 
 import Network.HTTP.Req
 
@@ -20,6 +23,11 @@ tags tlist = ("tags", foldr step "" tlist)
 rating :: String -> String
 rating r = "rating:" ++ r
 
-without :: String -> String
-without w = '-' : w
+type ExclusionSet = TVar (Set String)
+
+mkExclusionSet :: [String] -> STM ExclusionSet
+mkExclusionSet = newTVar . foldr insert empty
+
+exclude :: String -> ExclusionSet -> STM ()
+exclude md5 exSet = modifyTVar exSet (insert md5)
 

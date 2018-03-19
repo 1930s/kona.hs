@@ -39,6 +39,7 @@ dependencies:
 - optparse-applicative
 - ascii-progress
 - pcre-heavy
+- hashmap
 
 library:
   source-dirs: src

@@ -14,13 +14,13 @@ import qualified Control.Concurrent.Thread.Group as ThreadGroup
 
 import System.IO hiding (hPutStr)
 import System.Directory
+import System.FilePath
 import System.Console.AsciiProgress
 
 import Data.Monoid
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Lazy (hPutStr)
-import Data.Sequence
 
 import Network.HTTP.Req
 import Options.Applicative (execParser)
@@ -29,8 +29,11 @@ main :: IO ()
 main = displayConsoleRegions $
   execParser opts >>= return . parseOpts >>= parallel >>= takeMVar >> return ()
 
-createFolder :: FilePath -> IO ()
-createFolder = createDirectoryIfMissing True
+prepare :: FilePath -> IO (ExclusionSet)
+prepare output =
+  createDirectoryIfMissing True output >> listDirectory output >>=
+  return . map takeBaseName >>=
+  atomically . mkExclusionSet
 
 saveImage :: DownloadResult -> IO ()
 saveImage (filepath, rawData) = do
@@ -38,13 +41,8 @@ saveImage (filepath, rawData) = do
     hSetBuffering h (BlockBuffering Nothing)
     hPutStr h rawData
 
-getPosts :: Option Https -> IO [Post]
-getPosts option =
-  runReq (httpConfig 50 5) $
-  reqPosts (https "konachan.com" /: "post.json") option
-
-getPostsChan :: Option Https -> IO (TMQueue Post)
-getPostsChan option = do
+getPosts :: HttpConfig -> Option Https -> ExclusionSet -> IO (TMQueue Post)
+getPosts httpConfig option exSet = do
   tq <- atomically $ newTMQueue
   tg <- ThreadGroup.new
   forkIO $ loop 1 tq
@@ -52,10 +50,12 @@ getPostsChan option = do
   where
     loop :: Int -> TMQueue Post -> IO ()
     loop page tq =
-      getPosts (option <> "page" =: page) >>= \case
+      (runReq httpConfig $
+       reqPosts (https "konachan.com" /: "post.json")
+                (option <> "page" =: page)) >>= \case
         [] -> atomically $ closeTMQueue tq
         ps -> do
-          atomically $ mapM_ (writeTMQueue tq) ps
+          atomically $ filterMember exSet ps >>= mapM_ (writeTMQueue tq)
           loop (page + 1) tq
 
 getTotal :: Option Https -> IO (Int)
@@ -67,26 +67,23 @@ downloadPost :: PostConfig -> ProgressBar -> Post -> IO ()
 downloadPost (PostConfig kind output config) pbar p =
   (runReq config $ reqPost kind output p) >>= saveImage >> tick pbar
 
-serial :: CrawlerConfig -> IO ()
-serial (CrawlerConfig options _ config) = do
-  total <- getTotal options
-  pbar <- newProgressBar def
-  ps <- getPosts options
-  mapM_ (downloadPost config pbar) ps
-
 parallel :: CrawlerConfig -> IO (MVar Bool)
 parallel (CrawlerConfig options
                         maxWorker
-                        config@(PostConfig _ outputFolder _)
+                        config@(PostConfig _ outputFolder httpConfig)
          ) = do
-  createFolder outputFolder
+  exSet <- prepare outputFolder
+
   total <- getTotal options
   pbar <- newProgressBar $ progressBar total
-  tq <- getPostsChan options
-  term <- newEmptyMVar
+
+  tq <- getPosts httpConfig options exSet
   tg <- ThreadGroup.new
+  term <- newEmptyMVar
+
   forkIO $ loop tq tg term pbar
   return term
+
   where
     loop tq tg term pbar = do
       p <- atomically $ readTMQueue tq
