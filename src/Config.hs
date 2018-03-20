@@ -16,6 +16,7 @@ data CrawlerConfig =
   CrawlerConfig (Option Https) -- Query
                 Int -- Max workers
                 Int -- Limit
+                FilePath -- Exclusion file
                 PostConfig
 
 data PostConfig =

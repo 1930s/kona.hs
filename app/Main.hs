@@ -20,8 +20,9 @@ import System.FilePath
 import System.Console.AsciiProgress
 
 import Data.Monoid
+import Data.String
 import qualified Data.Text as T
-import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as B
 import Data.ByteString.Lazy (hPutStr)
 
 import Network.HTTP.Req hiding ((=:))
@@ -35,9 +36,10 @@ parallel :: CrawlerConfig -> IO (MVar Bool)
 parallel (CrawlerConfig options
                         maxWorker
                         limit
+                        exclusion
                         config@(PostConfig _ outputFolder httpConfig)
          ) = do
-  exSet <- prepare outputFolder
+  exSet <- prepare outputFolder exclusion
 
   total <- getTotal options
   let num = case (limit == 0 || limit > total) of
@@ -71,11 +73,19 @@ parallel (CrawlerConfig options
       atomically (ThreadGroup.nrOfRunning tg) >>= \num ->
         when (num >= limit) $ ThreadGroup.waitN (limit `div` 2) tg
 
-prepare :: FilePath -> IO (ExclusionSet)
-prepare output =
-  createDirectoryIfMissing True output >> listDirectory output >>=
-  return . map takeBaseName >>=
-  atomically . mkExclusionSet
+prepare :: FilePath -> FilePath -> IO ExclusionSet
+prepare output exclusion = do
+  createDirectoryIfMissing True output
+  existing <- listDirectory output >>= return . map takeBaseName
+  inFile <- readEsFile exclusion
+  atomically $ do
+    es1 <- mkExclusionSet existing
+    es2 <- mkExclusionSet inFile
+    esUnion es1 es2
+
+  where readEsFile esFile = case exclusion of
+          "" -> return []
+          _ -> readFile exclusion >>= return . lines
 
 getTotal :: Option Https -> IO (Int)
 getTotal options = do
@@ -104,8 +114,7 @@ getPosts httpConfig option exSet limit = do
              (option <> queryParam "page" (pure page))) >>= \case
             [] -> atomically $ closeTMQueue tq
             ps -> do
-              newAlready <-
-                atomically $ do
+              newAlready <- atomically $ do
                   filtered <- takePosts already ps
                   mapM_ (writeTMQueue tq) filtered
                   return (length filtered + already)

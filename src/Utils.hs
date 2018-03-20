@@ -29,8 +29,14 @@ order o = "order:" ++ o
 type ExclusionSet = TVar (Set String)
 
 mkExclusionSet :: [String] -> STM ExclusionSet
-mkExclusionSet = newTVar . foldr insert empty
+mkExclusionSet = newTVar . fromList
 
 exclude :: String -> ExclusionSet -> STM ()
 exclude md5 exSet = modifyTVar exSet (insert md5)
+
+esUnion :: ExclusionSet -> ExclusionSet -> STM ExclusionSet
+esUnion es1 es2 = do
+  set1 <- readTVar es1
+  set2 <- readTVar es2
+  newTVar $ union set1 set2
 

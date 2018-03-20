@@ -24,6 +24,7 @@ data Opt =
       Int -- Delay
       Int -- Retries
       Int -- Limit
+      FilePath -- Exclusion file
 
 opt :: Parser Opt
 opt =
@@ -33,7 +34,7 @@ opt =
     (long "rating" <> short 'r' <>
      help
        "Hentainess of the images. \
-       \Choose from: safe, questionable, explict, \
+       \Choose from: safe, questionable, explicit, \
        \questionableminus, questionableplus" <>
      showDefault <>
      value "safe" <>
@@ -88,6 +89,12 @@ opt =
      showDefault <>
      value 0 <>
      metavar "LIMIT"
+    ) <*>
+  strOption
+    (long "exclude" <> short 'e' <>
+     help "A file consists of excluded MD5s, one per line" <>
+     value "" <>
+     metavar "EXCLUSION_FILE"
     )
   where
     ratings =
@@ -108,9 +115,10 @@ opts = info (opt <**> helper)
   <> progDesc "Download all images about TAGS"
   <> header ("kona " ++ showVersion version ++ " – A Crawler for Konachan.com"))
 
-parseOpts (Opt tag rtg knd ord workers out delay retries limit) =
+parseOpts (Opt tag rtg knd ord workers out delay retries limit exclusion) =
   CrawlerConfig
     (mkParams [tags (rating rtg : order ord : tag)])
     workers
     limit
+    exclusion
     (PostConfig knd out (httpConfig delay retries))

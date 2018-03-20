@@ -6,12 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Added
-- Posts order
-- Limit Posts
+- Read exclusion from a file
 
 ## 1.0.0 - 2018-03-19
 ### Added
 - Multi-threaded crawler for any tags
+- Choose kind (quality) of image to download
 - Exclusion of existing images
+- Posts order
+- Limit Posts
 
 [Unreleased]: https://github.com/inflation/kona.hs/compare/v1.0.0...HEAD
