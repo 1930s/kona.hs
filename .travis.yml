@@ -29,3 +29,10 @@ deploy:
   on:
     tags: true
     repo: inflation/kona.hs
+notification:
+  email: false
+notifications:
+  slack:
+    secure: efBHxJQ2MP4OK1ytQpcsRC1D9WIq/ctt81jG0/uOZ0UIc9rU4nN/AcwMnW7XVgi3Ptw1Zk6DJQue1QxZEcU4r+LDRAIwJyI8RVnyU5hgFmjPMtcw+oDE9WyDyGAV77pDDckPo3+0N3N42H8UiLeggsMz2MG50hmBZF5D01z971UH4f9nO0E8oYkACAAxxn8cG+uDBHZGN4hHyxML4hckSxv8pQf0VTAZ6qahWhaFkqm03UI4wjfpSMQoLTQsSiKHI1Ex580l+mKbiBekJtrRLXHuG6z0NqiMgzTgCKfdWQ6EZBRdgzuotkoEySA/u+PoKlEPR31F91GZyrmtlfuFuz9dcdbH3C8TQ7lbVh9lVGFZHLPOax4Cx6FQKXu3MqjE5IRzrTcWx9LkjHuNFiGJeuDTbrywapEflY2yPsFOvs3K3OOhpspkgV1opEt6ZQjl+vTRq840EcXGCHQsOguHOfvZpRw1bvTzALuz2MU6yOx/cX2rlZhJZZL2XDtua2Rt/BxS6m7q9URkVtdjAu+zlZWtzS19Ch9k+pEFPXGVw05tC0dipYcCKK4Au0RY6je3+aam9J5kFecWnyzvQ+Sg61D5UbSDkv/dcviXF94J+fJjQzfAFCof5wGkaUvlbJSvtrU46mHD1iFXxoNuUGO/NpIk/0LyZ1k32RR1SyEYz9E=
+    on_success: change
+    on_failure: always
