@@ -1,0 +1,31 @@
+sudo: false
+language: generic
+cache:
+  directories:
+  - "$HOME/.stack"
+addons:
+  apt:
+    packages:
+    - libgmp-dev
+    - upx
+before_install:
+- mkdir -p ~/.local/bin
+- export PATH=$HOME/.local/bin:$PATH
+- travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards
+  --strip-components=1 -C ~/.local/bin '*/stack'
+install:
+- stack --no-terminal --install-ghc build --only-dependencies
+script:
+- stack --no-terminal install --haddock --no-haddock-deps
+before_deploy:
+- cd ~/.local/bin
+- upx ./kona
+- tar cJf kona-linux-x64.tar.xz ./kona
+deploy:
+  provider: releases
+  api_key:
+    secure: RJet7+z3BU+ZwiDoRgToTBz+x7PT8QiCAlPsmHYhnyIXE3MS2vo7RlfIBqBINCxmwU5vhYR3oht9JXBcCO55SNLZBdhkxHUoXCK23wpj3dylsI8mQCBxinb5Mf4rp//Gg96LcyJErz3JXhdIvHPCHsHTA21NC9sEU3xvldzVMBuDEI/DgZsNjFScJkfg8OFl2ee4hPkvxoXoTj4Nvaut+dCHlUSYL3JRtGU3yByLpbM45ZT4wIw8hmavANC33kzU+cX9kfCM2ryT+6wRhKJXgiDZL7kTD69IpNQdRFegIgUy/8sanWwqSNRIkGsuz4b/xezYAxBcfDQRkSDzHJcYJkFTs810HYG792sRkOGjThAU8Ctono/+XAw9qA80Vfb+ukWEj1C4TBS1pbp32QOF9//1ui+aouDN67iU657Fw4EaMvNN6r0f4vdM8aJXYypewoTjUyY6ha9dhnYu6OBo7edDOYH3z568oej+hqwOAYdJI/hUUcOvAj2ql9mkWhAjCYOJz81asbQ3d7MidzIAN14isEpYJHVaLr5ghhZ41Jkt+4kAz+84sIBiAV90RkSVC4N56hlKlVkG9QCAiFx7M8mbpwCZ0o0t7hdf39DhdP4W/xUF3KnraKjQmBl9/X9sks1wuysXqEoSamHoj12XrN2hz3swuinysKrq6NwWcfY=
+  file: kona-linux-x64.tar.xz
+  on:
+    tags: true
+    repo: inflation/kona.hs
