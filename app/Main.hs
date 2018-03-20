@@ -40,12 +40,13 @@ parallel (CrawlerConfig options
   exSet <- prepare outputFolder
 
   total <- getTotal options
-  pbar <- newProgressBar $ progressBar $
-    case limit of
-      0 -> total
-      _ -> limit
+  let num = case (limit == 0 || limit > total) of
+        True -> total
+        False -> limit
 
-  tq <- getPosts httpConfig options exSet
+  pbar <- newProgressBar $ progressBar num
+
+  tq <- getPosts httpConfig options exSet num
   tg <- ThreadGroup.new
   term <- newEmptyMVar
 
@@ -81,22 +82,40 @@ getTotal options = do
   runReq (httpConfig 0 0) $
     reqTotal (https "konachan.com" /: "post.xml") options
 
-getPosts :: HttpConfig -> Option Https -> ExclusionSet -> IO (TMQueue Post)
-getPosts httpConfig option exSet = do
+getPosts ::
+     HttpConfig
+  -> Option Https
+  -> ExclusionSet
+  -> Int
+  -> IO (TMQueue Post)
+getPosts httpConfig option exSet limit = do
   tq <- atomically $ newTMQueue
   tg <- ThreadGroup.new
-  forkIO $ loop 1 tq
+  forkIO $ loop 1 0 tq
   return tq
   where
-    loop :: Int -> TMQueue Post -> IO ()
-    loop page tq =
-      (runReq httpConfig $
-       reqPosts (https "konachan.com" /: "post.json")
-                (option <> queryParam "page" (pure page))) >>= \case
-        [] -> atomically $ closeTMQueue tq
-        ps -> do
-          atomically $ filterMember exSet ps >>= mapM_ (writeTMQueue tq)
-          loop (page + 1) tq
+    loop :: Int -> Int -> TMQueue Post -> IO ()
+    loop page already tq =
+      case (limit == 0 || already < limit) of
+        True ->
+          (runReq httpConfig $
+           reqPosts
+             (https "konachan.com" /: "post.json")
+             (option <> queryParam "page" (pure page))) >>= \case
+            [] -> atomically $ closeTMQueue tq
+            ps -> do
+              newAlready <-
+                atomically $ do
+                  filtered <- takePosts already ps
+                  mapM_ (writeTMQueue tq) filtered
+                  return (length filtered + already)
+              loop (page + 1) newAlready tq
+        False -> atomically $ closeTMQueue tq
+
+    takePosts already ps = filterMember exSet ps >>= \ps ->
+      return $ case limit of
+        0 -> ps
+        _ -> take (limit - already) ps
 
 downloadPost :: PostConfig -> ProgressBar -> Post -> IO ()
 downloadPost (PostConfig kind output config) pbar p =
