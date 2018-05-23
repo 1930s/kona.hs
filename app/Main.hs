@@ -1,36 +1,34 @@
-{-# LANGUAGE OverloadedStrings, DataKinds, LambdaCase #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
-import Lib
-import Utils
-import Opt
-import Config
+import           Config
+import           Lib
+import           Opt
+import           Utils
 
-import Control.Monad
-import Control.Monad.IO.Class
-import Control.Concurrent
-import Control.Concurrent.STM
-import Control.Concurrent.STM.TMQueue
+import           Control.Concurrent
+import           Control.Concurrent.STM
+import           Control.Concurrent.STM.TMQueue
 import qualified Control.Concurrent.Thread.Group as ThreadGroup
+import           Control.Monad
 
-import System.IO hiding (hPutStr)
-import System.Directory
-import System.FilePath
-import System.Console.AsciiProgress
+import           System.Console.AsciiProgress
+import           System.Directory
+import           System.FilePath
+import           System.IO                       hiding (hPutStr)
 
-import Data.Monoid
-import Data.String
-import qualified Data.Text as T
-import qualified Data.ByteString.Lazy.Char8 as B
-import Data.ByteString.Lazy (hPutStr)
+import           Data.ByteString                 (hPutStr)
+import           Data.Monoid
 
-import Network.HTTP.Req hiding ((=:))
-import Options.Applicative (execParser)
+import           Network.HTTP.Req                hiding (getHttpConfig)
+import           Options.Applicative             (execParser)
 
 main :: IO ()
 main = displayConsoleRegions $
-  execParser opts >>= return . parseOpts >>= parallel >>= takeMVar >> return ()
+  parseOpts <$> execParser opts >>= parallel >>= takeMVar >> return ()
 
 parallel :: CrawlerConfig -> IO (MVar Bool)
 parallel (CrawlerConfig options
@@ -42,9 +40,7 @@ parallel (CrawlerConfig options
   exSet <- prepare outputFolder exclusion
 
   total <- getTotal options
-  let num = case (limit == 0 || limit > total) of
-        True -> total
-        False -> limit
+  let num = if limit == 0 || limit > total then total else limit
 
   pbar <- newProgressBar $ progressBar num
 
@@ -76,7 +72,7 @@ parallel (CrawlerConfig options
 prepare :: FilePath -> FilePath -> IO ExclusionSet
 prepare output exclusion = do
   createDirectoryIfMissing True output
-  existing <- listDirectory output >>= return . map takeBaseName
+  existing <- map takeBaseName <$> listDirectory output
   inFile <- readEsFile exclusion
   atomically $ do
     es1 <- mkExclusionSet existing
@@ -85,11 +81,10 @@ prepare output exclusion = do
 
   where readEsFile esFile = case exclusion of
           "" -> return []
-          _ -> readFile exclusion >>= return . lines
+          _  -> lines <$> readFile exclusion
 
-getTotal :: Option Https -> IO (Int)
-getTotal options = do
-  runReq (httpConfig 0 0) $
+getTotal :: Option Https -> IO Int
+getTotal options = runReq (getHttpConfig 0 0) $
     reqTotal (https "konachan.com" /: "post.xml") options
 
 getPosts ::
@@ -99,17 +94,16 @@ getPosts ::
   -> Int
   -> IO (TMQueue Post)
 getPosts httpConfig option exSet limit = do
-  tq <- atomically $ newTMQueue
+  tq <- atomically newTMQueue
   tg <- ThreadGroup.new
   forkIO $ loop 1 0 tq
   return tq
   where
     loop :: Int -> Int -> TMQueue Post -> IO ()
     loop page already tq =
-      case (limit == 0 || already < limit) of
-        True ->
-          (runReq httpConfig $
-           reqPosts
+      if limit == 0 || already < limit then
+          runReq httpConfig
+           (reqPosts
              (https "konachan.com" /: "post.json")
              (option <> queryParam "page" (pure page))) >>= \case
             [] -> atomically $ closeTMQueue tq
@@ -119,7 +113,7 @@ getPosts httpConfig option exSet limit = do
                   mapM_ (writeTMQueue tq) filtered
                   return (length filtered + already)
               loop (page + 1) newAlready tq
-        False -> atomically $ closeTMQueue tq
+        else atomically $ closeTMQueue tq
 
     takePosts already ps = filterMember exSet ps >>= \ps ->
       return $ case limit of
@@ -128,10 +122,10 @@ getPosts httpConfig option exSet limit = do
 
 downloadPost :: PostConfig -> ProgressBar -> Post -> IO ()
 downloadPost (PostConfig kind output config) pbar p =
-  (runReq config $ reqPost kind output p) >>= saveImage >> tick pbar
+  runReq config (reqPost kind output p) >>= saveImage >> tick pbar
 
 saveImage :: DownloadResult -> IO ()
-saveImage (filepath, rawData) = do
+saveImage (filepath, rawData) =
   withBinaryFile filepath WriteMode $ \h -> do
     hSetBuffering h (BlockBuffering Nothing)
     hPutStr h rawData

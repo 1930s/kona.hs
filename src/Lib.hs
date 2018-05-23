@@ -1,4 +1,6 @@
-{-# LANGUAGE OverloadedStrings, DataKinds, QuasiQuotes #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
 
 module Lib
   ( Post
@@ -9,35 +11,30 @@ module Lib
   , filterMember
   ) where
 
-import Utils
+import           Utils
 
-import Control.Concurrent.STM
+import           Control.Concurrent.STM
 
-import Data.Monoid
-import Data.Default
-import Data.List.Split (splitOn)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as E
-import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy.Char8 as LB
-import qualified Data.ByteString.Lazy as BS
-import qualified Data.HashSet as HS
-import Data.Aeson hiding (Parser)
-import Data.Aeson.Types hiding (Parser)
+import           Data.Aeson
+import qualified Data.ByteString
+import qualified Data.ByteString.Char8  as B
+import qualified Data.HashSet           as HashSet
+import           Data.List.Split        (splitOn)
+import           Data.Monoid
 
-import Text.Regex.PCRE.Heavy
+import           Text.Regex.PCRE.Heavy
 
-import System.FilePath
+import           System.FilePath
 
-import Network.HTTP.Req hiding (header, (=:))
+import           Network.HTTP.Req       hiding ((=:))
 
-type BinaryContent = BS.ByteString
+type BinaryContent = Data.ByteString.ByteString
 
 data Post = Post
-  { md5 :: String
-  , fileUrl :: String
+  { md5        :: String
+  , fileUrl    :: String
   , previewUrl :: String
-  , sampleUrl :: String
+  , sampleUrl  :: String
   } deriving (Show)
 
 instance FromJSON Post where
@@ -51,28 +48,29 @@ instance FromJSON Post where
 
 getUrl :: String -> Post -> String
 getUrl "preview" p = previewUrl p
-getUrl "sample" p = sampleUrl p
-getUrl "origin" p = fileUrl p
+getUrl "sample" p  = sampleUrl p
+getUrl "origin" p  = fileUrl p
+getUrl _ _         = fail "Wrong type of request!"
 
 type DownloadResult = (FilePath, BinaryContent)
 
 reqTotal :: Url a -> Option a -> Req Int
 reqTotal url option =
-  req GET url NoReqBody lbsResponse (option <> "limit" =: "1") >>=
+  req GET url NoReqBody bsResponse (option <> "limit" =: "1") >>=
   parse . responseBody
   where
-    parse :: LB.ByteString -> Req Int
+    parse :: B.ByteString -> Req Int
     parse lb =
       case result lb of
         Just (total, _) -> return total
-        Nothing -> fail "Unable to retrieve total posts!"
-    result = LB.readInt . head . snd . head . scan [re|count="(\d+)"|]
+        Nothing         -> fail "Unable to retrieve total posts!"
+    result = B.readInt . head . snd . head . scan [re|count="(\d+)"|]
 
 reqPosts :: Url a -> Option a -> Req [Post]
 reqPosts url option = do
   r <- req GET url NoReqBody lbsResponse (option <> "limit" =: "10")
   case (eitherDecode $ responseBody r) :: Either String [Post] of
-    Left e -> fail e
+    Left e       -> fail e
     Right result -> return result
 
 reqPost :: String -> FilePath -> Post -> Req DownloadResult
@@ -81,18 +79,17 @@ reqPost kind base p = do
   rawData <- reqImage (getUrl kind p)
   return (path, rawData)
 
-reqImage :: String -> Req (BinaryContent)
+reqImage :: String -> Req BinaryContent
 reqImage imageUrl =
-  case (parseUrlHttps $ B.pack imageUrl) of
+  case parseUrlHttps $ B.pack imageUrl of
     Nothing -> fail "Parse URL Error"
-    Just (url, option) -> do
-      r <- req GET url NoReqBody lbsResponse option
-      return $ responseBody r
+    Just (url, option) ->
+      responseBody <$> req GET url NoReqBody bsResponse option
 
 getImagePath :: FilePath -> String -> Post -> FilePath
 getImagePath base kind post =
-  base </> (md5 post) ++ '.' : (last $ splitOn "." (getUrl kind post))
+  base </> md5 post ++ '.' : last (splitOn "." (getUrl kind post))
 
 filterMember :: ExclusionSet -> [Post] -> STM [Post]
 filterMember exSet ps =
-  readTVar exSet >>= \set -> return $ filter (\p -> HS.notMember (md5 p) set) ps
+  readTVar exSet >>= \set -> return $ filter (\p -> HashSet.notMember (md5 p) set) ps

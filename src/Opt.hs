@@ -3,16 +3,15 @@ module Opt
   , parseOpts
   ) where
 
-import Paths_kona (version)
-import Utils
-import Config
+import           Config
+import           Paths_kona          (version)
+import           Utils
 
-import Data.Monoid
-import Data.Version (showVersion)
+import           Data.Monoid
+import           Data.Version        (showVersion)
 
-import Options.Applicative
+import           Options.Applicative
 
-import Network.HTTP.Req hiding (header)
 
 data Opt =
   Opt [String] -- Tags
@@ -25,6 +24,7 @@ data Opt =
       Int -- Retries
       Int -- Limit
       FilePath -- Exclusion file
+
 
 opt :: Parser Opt
 opt =
@@ -110,15 +110,17 @@ opt =
       | v `elem` sets = Right v
       | otherwise = Left $ "Unknown parameter: " ++ v
 
+opts :: ParserInfo Opt
 opts = info (opt <**> helper)
   ( fullDesc
   <> progDesc "Download all images about TAGS"
   <> header ("kona " ++ showVersion version ++ " – A Crawler for Konachan.com"))
 
+parseOpts :: Opt -> CrawlerConfig
 parseOpts (Opt tag rtg knd ord workers out delay retries limit exclusion) =
   CrawlerConfig
     (mkParams [tags (rating rtg : order ord : tag)])
     workers
     limit
     exclusion
-    (PostConfig knd out (httpConfig delay retries))
+    (PostConfig knd out (getHttpConfig delay retries))

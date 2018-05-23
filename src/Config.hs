@@ -1,16 +1,17 @@
-{-# LANGUAGE OverloadedStrings, DataKinds #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Config where
 
-import Control.Retry
+import           Control.Retry
 
-import Data.Monoid
+import           Data.Monoid
 
-import System.Console.AsciiProgress
+import           System.Console.AsciiProgress
 
-import Network.HTTP.Req
-import qualified Network.HTTP.Client as L
-import qualified Network.HTTP.Types as Y
+import qualified Network.HTTP.Client          as L
+import           Network.HTTP.Req
+import qualified Network.HTTP.Types           as Y
 
 data CrawlerConfig =
   CrawlerConfig (Option Https) -- Query
@@ -24,8 +25,8 @@ data PostConfig =
              FilePath -- Output path
              HttpConfig -- HttpConfig
 
-httpConfig :: Int -> Int -> HttpConfig
-httpConfig delay retries =
+getHttpConfig :: Int -> Int -> HttpConfig
+getHttpConfig delay retries =
   def
   { httpConfigRetryPolicy =
       exponentialBackoff (delay * 1000) <> -- Convert to microseconds
@@ -39,8 +40,9 @@ httpConfig delay retries =
 progressBar :: Int -> System.Console.AsciiProgress.Options
 progressBar total =
   def
-  { pgFormat = "Finished :percent :bar :current/:total " ++
-               "(elapsed :elapseds, :etas remaining)"
+  { pgFormat =
+      "Finished :percent :bar :current/:total " ++
+      "(elapsed :elapseds, :etas remaining)"
   , pgCompletedChar = '█'
   , pgPendingChar = '▁'
   , pgTotal = fromIntegral total

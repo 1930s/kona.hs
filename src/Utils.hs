@@ -1,18 +1,21 @@
 module Utils where
 
-import Control.Concurrent.STM
+import           Control.Concurrent.STM
 
-import Data.Monoid
-import qualified Data.Text as T
-import Data.HashSet
+import           Data.HashSet
+import           Data.Monoid
+import qualified Data.Text              as T
 
-import Network.HTTP.Req hiding ((=:))
+import           Network.HTTP.Req       hiding ((=:))
+
+
+---- Params ----
 
 (=:) :: (QueryParam p) => String -> String -> p
 (=:) k v = queryParam (T.pack k) (pure v)
 
 mkParams :: (QueryParam param, Monoid param) => [(String, String)] -> param
-mkParams params = foldr step mempty params
+mkParams = foldr step mempty
   where
     step (k, v) q = k =: v <> q
 
@@ -25,6 +28,9 @@ rating r = "rating:" ++ r
 
 order :: String -> String
 order o = "order:" ++ o
+
+
+---- ExclusionSet ----
 
 type ExclusionSet = TVar (Set String)
 
@@ -39,4 +45,3 @@ esUnion es1 es2 = do
   set1 <- readTVar es1
   set2 <- readTVar es2
   newTVar $ union set1 set2
-
