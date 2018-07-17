@@ -4,9 +4,9 @@ import           Control.Concurrent.STM
 
 import           Data.HashSet
 import           Data.Monoid
-import qualified Data.Text              as T
+import qualified Data.Text                     as T
 
-import           Network.HTTP.Req       hiding ((=:))
+import           Network.HTTP.Req        hiding ( (=:) )
 
 
 ---- Params ----
@@ -15,13 +15,10 @@ import           Network.HTTP.Req       hiding ((=:))
 (=:) k v = queryParam (T.pack k) (pure v)
 
 mkParams :: (QueryParam param, Monoid param) => [(String, String)] -> param
-mkParams = foldr step mempty
-  where
-    step (k, v) q = k =: v <> q
+mkParams = foldr step mempty where step (k, v) q = k =: v <> q
 
 tags :: [String] -> (String, String)
-tags tlist = ("tags", foldr step "" tlist)
-  where step t ts = t ++ " " ++ ts
+tags tlist = ("tags", foldr step "" tlist) where step t ts = t ++ " " ++ ts
 
 rating :: String -> String
 rating r = "rating:" ++ r
